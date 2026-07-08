@@ -33,3 +33,6 @@ Thumbs.db
 temp/
 tmp/
 *.log
+
+push.bat
+push.ps1

@@ -7,7 +7,7 @@ import time
 
 # Configure page metadata
 st.set_page_config(
-    page_title="Autonomous Document Generator Agent",
+    page_title="Autonomous ERP Business Document Generator Agent",
     page_icon="📝",
     layout="wide",
     initial_sidebar_state="expanded"
