@@ -1,0 +1,35 @@
+# Virtual environment
+agentvenv/
+.venv/
+venv/
+env/
+ENV/
+
+# Sensitive credentials
+.env
+
+# Python compilation files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE and Editor configs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Application generated temporary files
+*.tmp
+temp/
+tmp/
+*.log
