@@ -7,7 +7,7 @@ import time
 
 # Configure page metadata
 st.set_page_config(
-    page_title="Autonomous ERP Business Document Generator Agent",
+    page_title="Autonomous Business Document Generator Agent",
     page_icon="📝",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -66,7 +66,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">Autonomous ERP Business Document Generator Agent</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">Autonomous Business Document Generator Agent</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Generate professional, grounded enterprise documents using LangGraph RAG workflows and safety guardrails.</div>', unsafe_allow_html=True)
 
 # Session State for Pre-filling Examples
@@ -133,7 +133,7 @@ st.sidebar.code(BACKEND_API_URL)
 # Route views
 if st.session_state.active_view != "generator":
     if st.session_state.active_view == "overview":
-        st.markdown("## Autonomous ERP Business Document Generator Agent")
+        st.markdown("## Autonomous Business Document Generator Agent")
         st.markdown("### What Problem It Solves")
         st.write(
             "In modern enterprise resource planning (ERP) environments, compiling standard business documents "
