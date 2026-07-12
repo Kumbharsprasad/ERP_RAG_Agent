@@ -46,7 +46,7 @@ def main():
         print(f"  Read {len(file_bytes)} bytes. Parsing content...")
         try:
             # Parse
-            parsed_blocks = parse_file(file_bytes, filename)
+            parsed_blocks, _ = parse_file(file_bytes, filename)
             print(f"  Extracted {len(parsed_blocks)} block(s) from document.")
             
             # Chunk

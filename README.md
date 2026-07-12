@@ -4,9 +4,7 @@ This module is Phase 1 of a larger RAG (Retrieval-Augmented Generation) pipeline
 
 ## Supported File Types
 
-- **PDF (`.pdf`)**: Parsed using `pdfplumber` page-by-page.
-- **DOCX (`.docx`)**: Parsed using `python-docx` grouped into blocks of 10 paragraphs.
-- **PPTX (`.pptx`)**: Parsed using `python-pptx` slide-by-slide.
+- **PDF, DOCX, PPTX, XLSX, PNG, JPG, JPEG**: Parsed using **LiteParse** (open-source, local-first, Rust-based), which extracts layout-aware Markdown including tables, headings, and lists, with built-in OCR fallback and zero external API calls—preserving the project's fully in-memory, no-external-transmission architecture. (XLSX, PNG, JPG, and JPEG are newly supported formats enabled by this consolidation).
 - **HTML (`.html`, `.htm`)**: Parsed using `BeautifulSoup` splitting into sections based on heading tags (`<h1>`-`<h6>`).
 - **CSV (`.csv`)**: Parsed using `pandas` into blocks of 20 rows, preserving column headers in each block.
 - **TXT (`.txt`)**: Decoded directly and split into ~500-word blocks.
@@ -208,6 +206,13 @@ The repository contains a declarative `render.yaml` configuration. To deploy:
 2. Render will automatically parse the `render.yaml` template, creating a web service running `uvicorn app.main:app` on port 10000.
 3. Configure the environment variables (`GROQ_API_KEY`, `GEMINI_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`, `LOGFIRE_TOKEN`) directly in Render's Env Settings dashboard.
 
+> [!IMPORTANT]
+> **LibreOffice Host Dependency**: LiteParse utilizes LibreOffice on the host system to perform layout-aware DOCX/PPTX/XLSX conversions.
+> - **Local Development**: Ensure LibreOffice is installed (and added to your system `PATH`).
+> - **Render/Production Target**: Because Render's native Python runtime lacks system-level packages like LibreOffice, a custom Docker image must be used for deployment (installing `libreoffice-fresh` via `apt`).
+> - **Known Limitation**: Using Render's default free-tier Python native runtime will trigger fallback parsing (`python-docx` / `python-pptx` / `pandas`) instead of LiteParse, which may reduce parsing quality for tables and complex layouts.
+
+
 #### Streamlit UI (Streamlit Community Cloud)
 The Streamlit application can be deployed for free on **Streamlit Community Cloud**:
 1. Connect the git repository to Streamlit Community Cloud.
@@ -222,8 +227,8 @@ The Streamlit application can be deployed for free on **Streamlit Community Clou
 ## Project Phase Summaries
 
 1. **Phase 1: Ingestion & Parsing**
-   - Implemented standard and scanned PDF text extraction with `pdfplumber` and `pytesseract` OCR fallbacks.
-   - Built slideshow slides text parser (`python-pptx`) and spreadsheet tab parser (`pandas`).
+   - Implemented unified PDF, DOCX, PPTX, XLSX, and Image parsing using the `LiteParse` local-first engine with complexity detection and auto-OCR.
+   - Retained BeautifulSoup heading-based parsing for HTML, Pandas chunking for CSV, and direct paragraph splitting for TXT.
 2. **Phase 2: RAG Vector Pipeline**
    - Wired up Gemini embedding generator and indexed content in Qdrant with token sliding windows and session-id TTL cleanup.
    - Implemented GROQ llama-3.1-8b completions with backoff retry logic.

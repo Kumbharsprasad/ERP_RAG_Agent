@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-multipart
-pdfplumber
+liteparse
 python-docx
 python-pptx
 beautifulsoup4
@@ -11,10 +11,10 @@ python-dotenv
 litellm
 qdrant-client
 google-generativeai
-pytesseract
 logfire[fastapi]
 langgraph
 langchain-core 
 guardrails-ai
 streamlit
 requests
+openpyxl

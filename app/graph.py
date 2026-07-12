@@ -101,14 +101,18 @@ def parser_node(state: AgentState) -> AgentState:
     """
     parsed_chunks = state.get("parsed_chunks") or []
     uploaded = state.get("uploaded_files") or []
+    state_warnings = state.get("warnings") or []
     
     for f in uploaded:
         filename = f.get("filename", "")
         file_bytes = f.get("bytes", b"")
-        blocks = parsers.parse_file(file_bytes, filename)
+        blocks, warnings = parsers.parse_file(file_bytes, filename)
         parsed_chunks.extend(blocks)
+        if warnings:
+            state_warnings.extend(warnings)
         
     state["parsed_chunks"] = parsed_chunks
+    state["warnings"] = state_warnings
     return state
 
 def chunk_and_embed_node(state: AgentState) -> AgentState:
@@ -302,15 +306,54 @@ def generate_section_node(state: AgentState) -> AgentState:
     if context_str:
         user_prompt += f"\nRetrieved Context:\n{context_str}\n"
         
-    try:
-        response_text = llm_gateway.generate_completion(user_prompt, system_prompt)
-        res = parse_json_from_llm(response_text)
-        content = res.get("content", "Section content could not be generated.")
-        used_files = res.get("sources_used", [])
-    except Exception as e:
-        logfire.error("Error in generate_section_node for {section_name}: {error}", section_name=section_name, error=str(e))
-        content = "Section content generation error."
-        used_files = []
+    content = "Section content generation error."
+    used_files = []
+    max_attempts = 4
+    json_instruction = ""
+    
+    for attempt in range(max_attempts):
+        try:
+            current_user_prompt = user_prompt
+            if json_instruction:
+                current_user_prompt += f"\n\nIMPORTANT: {json_instruction}"
+                
+            response_text = llm_gateway.generate_completion(current_user_prompt, system_prompt)
+            
+            output_clean = response_text.strip()
+            match = re.search(r'```json\s*(.*?)\s*```', output_clean, re.DOTALL | re.IGNORECASE)
+            if match:
+                output_clean = match.group(1)
+            else:
+                match = re.search(r'```\s*(.*?)\s*```', output_clean, re.DOTALL | re.IGNORECASE)
+                if match:
+                    output_clean = match.group(1)
+                    
+            res = json.loads(output_clean.strip(), strict=False)
+            content = res.get("content", "Section content could not be generated.")
+            used_files = res.get("sources_used", [])
+            break
+        except json.JSONDecodeError as e:
+            logfire.warn(
+                "JSON decoding failed for generate_section_node on attempt {attempt_num} for section '{section_name}'. Output: {output}. Error: {error}",
+                attempt_num=attempt + 1,
+                section_name=section_name,
+                output=response_text,
+                error=str(e)
+            )
+            json_instruction = "Return ONLY valid JSON. Ensure all keys are quoted and all fields are comma-separated correctly."
+            if attempt == max_attempts - 1:
+                content = f"JSON parsing failed for section {section_name} after {max_attempts} retries."
+                used_files = []
+                
+                warnings_list = state.get("warnings") or []
+                warnings_list.append(f"JSON parsing failed after {max_attempts} retries for section: {section_name}")
+                state["warnings"] = warnings_list
+                state["status"] = "partial_failure"
+        except Exception as e:
+            logfire.error("Error in generate_section_node for {section_name}: {error}", section_name=section_name, error=str(e))
+            content = "Section content generation error."
+            used_files = []
+            break
         
     # Apply grounding notes to content if retrieved files match
     sources_used = state.get("sources_used") or []
@@ -370,7 +413,8 @@ def assemble_docx_node(state: AgentState) -> AgentState:
     doc.save(temp_path)
     
     state["document_path"] = temp_path
-    state["status"] = "success"
+    if state.get("status") != "partial_failure":
+        state["status"] = "success"
     return state
 
 # Routing logic

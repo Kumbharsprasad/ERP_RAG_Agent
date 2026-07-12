@@ -4,6 +4,7 @@ import base64
 import logfire
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException, status
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
 from app.graph import app_graph
@@ -13,16 +14,27 @@ from app import guardrails
 # Initialize FastAPI
 app = FastAPI(title="ERP RAG Agent API")
 
+# Add CORS Middleware to allow requests from local dev and production vercel domains
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Instrument FastAPI with logfire
 logfire.instrument_fastapi(app)
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".html", ".htm", ".csv", ".txt"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".csv", ".txt", ".png", ".jpg", ".jpeg"}
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
+
+import shutil
 
 @app.get("/health")
 def health_check():
     """
-    Liveness check that confirms API state and Qdrant client connection.
+    Liveness check that confirms API state, Qdrant client connection, and LibreOffice availability.
     """
     try:
         # Check Qdrant collection status
@@ -32,9 +44,13 @@ def health_check():
         qdrant_status = f"unhealthy ({str(e)})"
         logfire.warn("Health check: Qdrant client is unhealthy. Error: {error}", error=str(e))
         
+    # Check LibreOffice availability on host
+    libreoffice_available = bool(shutil.which("libreoffice") or shutil.which("soffice"))
+    
     return {
         "status": "healthy",
-        "qdrant": qdrant_status
+        "qdrant": qdrant_status,
+        "libreoffice": "available" if libreoffice_available else "not_available"
     }
 
 @app.post("/agent")
@@ -72,7 +88,7 @@ async def execute_agent(
             if ext.lower() not in ALLOWED_EXTENSIONS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Unsupported file type: '{f.filename}'. Allowed: PDF, DOCX, PPTX, HTML, CSV, TXT"
+                    detail=f"Unsupported file type: '{f.filename}'. Allowed: PDF, DOCX, PPTX, XLSX, HTML, CSV, TXT, PNG, JPG, JPEG"
                 )
                 
             # Check file size (by reading and checking bytes count)
@@ -146,7 +162,7 @@ async def execute_agent(
     }
     
     # Encode document to base64 if generation succeeded
-    if result.get("status") == "success":
+    if result.get("status") in ["success", "partial_failure"]:
         doc_path = result.get("document_path", "")
         if doc_path and os.path.exists(doc_path):
             try:

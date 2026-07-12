@@ -66,7 +66,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">Autonomous Business Document Generator Agent</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">Autonomous Business Document Generator Agent V1</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Generate professional, grounded enterprise documents using LangGraph RAG workflows and safety guardrails.</div>', unsafe_allow_html=True)
 
 # Session State for Pre-filling Examples
@@ -184,7 +184,7 @@ if st.session_state.active_view != "generator":
                 "Groq — Llama 3.1 8B Instant", "Gemini text-embedding-004", "LiteLLM",
                 "Qdrant Cloud (session-scoped, metadata-filtered)", "Pydantic Logfire (OpenTelemetry-based tracing)", 
                 "Guardrails AI + custom regex-based PII/injection checks",
-                "python-docx", "pdfplumber, python-docx, python-pptx, BeautifulSoup, pandas", 
+                "python-docx", "liteparse, BeautifulSoup, pandas", 
                 "FastAPI on Render, Streamlit on Streamlit Community Cloud"
             ]
         }
@@ -202,7 +202,7 @@ request_prompt = st.text_area(
 
 uploaded_files = st.file_uploader(
     "Upload supporting documents (Optional - Max 5 files, 10MB each)",
-    type=["pdf", "docx", "pptx", "html", "csv", "txt"],
+    type=["pdf", "docx", "pptx", "xlsx", "html", "csv", "txt", "png", "jpg", "jpeg"],
     accept_multiple_files=True
 )
 

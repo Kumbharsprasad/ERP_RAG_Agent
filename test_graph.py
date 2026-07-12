@@ -6,7 +6,49 @@ from app.graph import app_graph
 # Load environment variables
 dotenv.load_dotenv()
 
+def mock_generate_completion(user_prompt: str, system_prompt: str) -> str:
+    user_prompt_lower = user_prompt.lower()
+    system_prompt_lower = system_prompt.lower()
+    
+    # 1. intent guard mock
+    if "intent guard" in system_prompt_lower:
+        if "joke" in user_prompt_lower or "funny" in user_prompt_lower:
+            return '{"is_business_query": false, "rejection_reason": "Request does not align with business document generation assistant intent. Request is for recreational content."}'
+        else:
+            return '{"is_business_query": true, "rejection_reason": ""}'
+            
+    # 2. classify doc mock
+    if "classify" in system_prompt_lower or "classification" in system_prompt_lower:
+        if "sop" in user_prompt_lower:
+            return '{"document_type": "SOP"}'
+        else:
+            return '{"document_type": "Business Report"}'
+            
+    # 3. planner mock
+    if "business analyst" in system_prompt_lower or "technical writer" in system_prompt_lower:
+        if "sop" in user_prompt_lower:
+            return '{"plan": ["Purpose and Scope", "Definition of Key Terms", "Leave Application Procedure"], "facts": {"PCCOE": "Pimpri Chinchwad College of Engineering"}, "assumptions": ["Mock assumption 1"]}'
+        else:
+            return '{"plan": ["Executive Summary", "Introduction to the People Strategy", "Key Themes and Goals"], "facts": {"PCCOE": "Pimpri Chinchwad College of Engineering"}, "assumptions": ["Mock assumption 2"]}'
+        
+    # 4. generate section mock
+    if "writer" in system_prompt_lower or "generating content" in system_prompt_lower:
+        return '{"content": "Mock generated section content body text.", "sources_used": []}'
+        
+    return '{"status": "unknown"}'
+
 class TestStateGraph(unittest.TestCase):
+    
+    def setUp(self):
+        from unittest.mock import patch
+        self.patcher_completion = patch("app.llm_gateway.generate_completion", side_effect=mock_generate_completion)
+        self.patcher_embedding = patch("app.llm_gateway.generate_embedding", return_value=[0.1]*1536)
+        self.patcher_completion.start()
+        self.patcher_embedding.start()
+
+    def tearDown(self):
+        self.patcher_completion.stop()
+        self.patcher_embedding.stop()
     
     def test_graph_no_files(self):
         """

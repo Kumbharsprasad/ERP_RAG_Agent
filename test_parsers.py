@@ -41,17 +41,71 @@ def make_minimal_docx():
     return out.getvalue()
 
 def make_minimal_pptx():
-    from pptx import Presentation
-    prs = Presentation()
-    blank_layout = prs.slide_layouts[6]
-    for i in range(1, 4):
-        slide = prs.slides.add_slide(blank_layout)
-        txBox = slide.shapes.add_textbox(0, 0, 100, 100)
-        tf = txBox.text_frame
-        tf.text = f"This is slide {i} text contents."
+    import os
+    path = "data/people_strategy_summary_slides.pptx"
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    raise FileNotFoundError(f"Mock PPTX file not found at {path}")
+
+def make_minimal_xlsx():
+    import zipfile
     out = io.BytesIO()
-    prs.save(out)
+    with zipfile.ZipFile(out, 'w') as z:
+        z.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Types xmlns="http://schemas.openxmlformats.org/markup-compatibility/2006">\n'
+            '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+            '  <Default Extension="xml" ContentType="application/xml"/>\n'
+            '  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>\n'
+            '  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>\n'
+            '</Types>'
+        )
+        z.writestr(
+            "xl/workbook.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">\n'
+            '  <sheets>\n'
+            '    <sheet name="TestSheet" sheetId="1" r:id="rId1"/>\n'
+            '  </sheets>\n'
+            '</workbook>'
+        )
+        z.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            '  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>\n'
+            '</Relationships>'
+        )
+        z.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            '  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>\n'
+            '</Relationships>'
+        )
+        z.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\n'
+            '  <sheetData>\n'
+            '    <row r="1">\n'
+            '      <c r="A1" t="inlineStr"><is><t>Header1</t></is></c>\n'
+            '      <c r="B1" t="inlineStr"><is><t>Header2</t></is></c>\n'
+            '    </row>\n'
+            '    <row r="2">\n'
+            '      <c r="A2" t="inlineStr"><is><t>Row1Val1</t></is></c>\n'
+            '      <c r="B2" t="inlineStr"><is><t>Row1Val2</t></is></c>\n'
+            '    </row>\n'
+            '  </sheetData>\n'
+            '</worksheet>'
+        )
     return out.getvalue()
+
+def make_minimal_png():
+    # 1x1 pixel transparent PNG
+    return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
 
 def make_minimal_html():
     return (
@@ -88,7 +142,7 @@ def test_file_type(name: str, bytes_generator, filename: str):
         print(f"Generating bytes complete, size: {len(file_bytes)} bytes.")
         
         # Parse file
-        parsed_blocks = parse_file(file_bytes, filename)
+        parsed_blocks, _ = parse_file(file_bytes, filename)
         print(f"Parsing complete. Extracted {len(parsed_blocks)} blocks.")
         for idx, block in enumerate(parsed_blocks):
             snippet = block['text'].replace('\n', '\\n')[:80] + '...' if len(block['text']) > 80 else block['text'].replace('\n', '\\n')
@@ -135,13 +189,15 @@ def main():
     test_file_type("DOCX", make_minimal_docx, "sample.docx")
     test_file_type("PPTX", make_minimal_pptx, "sample.pptx")
     test_file_type("PDF", make_minimal_pdf, "sample.pdf")
+    test_file_type("XLSX", make_minimal_xlsx, "sample.xlsx")
+    test_file_type("PNG", make_minimal_png, "sample.png")
     
     # Test error handling
     print("=" * 60)
     print("Testing Unsupported File Type Error Handling")
     print("=" * 60)
     try:
-        parse_file(b"some binary data", "unsupported.xlsx")
+        parse_file(b"some binary data", "unsupported.xyz")
         print("[FAIL] Dispatcher did not raise error for unsupported extension.")
     except ValueError as ve:
         print(f"[PASS] Correctly raised ValueError: {ve}")

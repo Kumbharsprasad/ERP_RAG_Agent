@@ -1,93 +1,176 @@
 import io
 import os
-import shutil
-import pdfplumber
-import docx
-from pptx import Presentation
 from bs4 import BeautifulSoup, NavigableString
 import pandas as pd
-import pytesseract
 import logfire
 
-# Configure Tesseract path for Windows fallback if not on PATH
-if not shutil.which("tesseract"):
-    default_win_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    if os.path.exists(default_win_path):
-        pytesseract.pytesseract.tesseract_cmd = default_win_path
-
-def parse_pdf(file_bytes: bytes, filename: str) -> list[dict]:
+def parse_with_liteparse(file_bytes: bytes, filename: str, ext: str) -> tuple[list[dict], list[str]]:
     """
-    Parses a PDF file from bytes.
-    Extracts text per page, with location formatted as 'Page {n}' (1-indexed).
-    Falls back to Tesseract OCR if pdfplumber cannot extract text from a page.
+    Unified parser using LiteParse for PDF, DOCX, PPTX, XLSX, and images (PNG/JPG/JPEG).
+    Runs complexity check for PDF and images first to dynamically choose OCR setting.
     """
-    blocks = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for idx, page in enumerate(pdf.pages):
-            text = page.extract_text() or ""
-            
-            # If extracted text is empty, attempt OCR fallback
-            if not text.strip():
-                logfire.warn("Page {page_num} of {filename} has no digital text. Running Tesseract OCR...", page_num=idx + 1, filename=filename)
-                try:
-                    # Convert page to a PIL Image
-                    page_image = page.to_image(resolution=150)
-                    pil_img = page_image.original
-                    ocr_text = pytesseract.image_to_string(pil_img)
-                    if ocr_text and ocr_text.strip():
-                        text = ocr_text
-                        logfire.info("OCR successfully extracted text for Page {page_num}", page_num=idx + 1)
-                except Exception as ocr_err:
-                    logfire.error("OCR fallback failed for {filename} Page {page_num}", filename=filename, page_num=idx + 1, error=str(ocr_err))
-                    print(f"Warning: OCR fallback failed for {filename} Page {idx + 1}: {ocr_err}")
-            
-            blocks.append({
-                "text": text,
-                "source_file": filename,
-                "location": f"Page {idx + 1}"
-            })
-    return blocks
-
-def parse_docx(file_bytes: bytes, filename: str) -> list[dict]:
-    """
-    Parses a DOCX file from bytes.
-    Extracts paragraphs and groups them into blocks of ~10 paragraphs.
-    Location is formatted as 'Paragraphs {start}-{end}'.
-    """
-    doc = docx.Document(io.BytesIO(file_bytes))
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+    from liteparse import LiteParse
     
+    # Decide if we run complexity check (only for PDF and images)
+    is_pdf_or_image = ext.lower() in [".pdf", ".png", ".jpg", ".jpeg"]
+    ocr_needed = True
+    
+    if is_pdf_or_image:
+        try:
+            temp_parser = LiteParse()
+            pages_complexity = temp_parser.is_complex(file_bytes)
+            ocr_needed = False
+            for p_comp in pages_complexity:
+                needs_ocr = getattr(p_comp, "needs_ocr", False)
+                page_num = getattr(p_comp, "page_num", 0)
+                reasons = getattr(p_comp, "reasons", [])
+                logfire.info(
+                    "Page {page_num} complexity check: needs_ocr={needs_ocr}, reasons={reasons}",
+                    page_num=page_num, needs_ocr=needs_ocr, reasons=reasons
+                )
+                if needs_ocr:
+                    ocr_needed = True
+        except Exception as e:
+            logfire.warn("Complexity check failed: {error}. Defaulting to ocr_enabled=True", error=str(e))
+            ocr_needed = True
+    else:
+        # Non-PDFs/images (like DOCX, PPTX, XLSX) do not require OCR for standard text layers
+        ocr_needed = False
+        
+    logfire.info(
+        "Parsing {filename} via LiteParse with ocr_enabled={ocr_enabled}",
+        filename=filename, ocr_enabled=ocr_needed
+    )
+    
+    try:
+        parser = LiteParse(output_format="markdown", ocr_enabled=ocr_needed, image_mode="placeholder")
+        result = parser.parse(file_bytes)
+    except Exception as e:
+        err_msg = str(e)
+        is_missing_dependency = (
+            "LibreOffice is not installed" in err_msg or 
+            "ImageMagick is not installed" in err_msg or 
+            "conversion error" in err_msg
+        )
+        if is_missing_dependency:
+            missing_dep = "LibreOffice"
+            if "ImageMagick" in err_msg:
+                missing_dep = "ImageMagick"
+            logfire.warn(
+                "LiteParse parsing failed due to missing system dependency: {missing_dependency}. Error: {error}. Attempting local library fallback...",
+                missing_dependency=missing_dep,
+                error=err_msg
+            )
+            if ext.lower() == ".docx":
+                try:
+                    import docx
+                    doc = docx.Document(io.BytesIO(file_bytes))
+                    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                    blocks = []
+                    chunk_size = 10
+                    for i in range(0, len(paragraphs), chunk_size):
+                        group = paragraphs[i:i + chunk_size]
+                        blocks.append({
+                            "text": "\n".join(group),
+                            "source_file": filename,
+                            "location": f"Paragraphs {i + 1}-{i + len(group)}"
+                        })
+                    logfire.info("Successfully parsed {filename} via fallback python-docx.", filename=filename)
+                    warning_msg = "PPTX/DOCX parsing used degraded fallback (python-pptx/python-docx) instead of LiteParse due to missing system dependency: LibreOffice. Parsing quality may be reduced for tables and complex layouts."
+                    return blocks, [warning_msg]
+                except Exception as docx_err:
+                    logfire.error("Fallback docx parsing failed: {error}", error=str(docx_err))
+            elif ext.lower() == ".pptx":
+                try:
+                    from pptx import Presentation
+                    prs = Presentation(io.BytesIO(file_bytes))
+                    blocks = []
+                    for idx, slide in enumerate(prs.slides):
+                        slide_text_parts = []
+                        for shape in slide.shapes:
+                            if hasattr(shape, "text") and shape.text.strip():
+                                slide_text_parts.append(shape.text)
+                        blocks.append({
+                            "text": "\n".join(slide_text_parts),
+                            "source_file": filename,
+                            "location": f"Slide {idx + 1}"
+                        })
+                    logfire.info("Successfully parsed {filename} via fallback python-pptx.", filename=filename)
+                    warning_msg = "PPTX/DOCX parsing used degraded fallback (python-pptx/python-docx) instead of LiteParse due to missing system dependency: LibreOffice. Parsing quality may be reduced for tables and complex layouts."
+                    return blocks, [warning_msg]
+                except Exception as pptx_err:
+                    logfire.error("Fallback pptx parsing failed: {error}", error=str(pptx_err))
+            elif ext.lower() == ".xlsx":
+                try:
+                    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+                    blocks = []
+                    for sheet_name in xls.sheet_names:
+                        df = pd.read_excel(xls, sheet_name=sheet_name)
+                        blocks.append({
+                            "text": df.to_csv(index=False).strip(),
+                            "source_file": filename,
+                            "location": f"Sheet: {sheet_name}"
+                        })
+                    logfire.info("Successfully parsed {filename} via fallback pandas.read_excel.", filename=filename)
+                    return blocks, []
+                except Exception as xlsx_err:
+                    logfire.error("Fallback xlsx parsing failed: {error}", error=str(xlsx_err))
+        raise e
+        
     blocks = []
-    chunk_size = 10
-    for i in range(0, len(paragraphs), chunk_size):
-        group = paragraphs[i:i + chunk_size]
-        text = "\n".join(group)
-        blocks.append({
-            "text": text,
-            "source_file": filename,
-            "location": f"Paragraphs {i + 1}-{i + len(group)}"
-        })
-    return blocks
+    
+    # Safely check if result contains pages and they have the 'text' property populated
+    has_page_text = False
+    if hasattr(result, "pages") and result.pages:
+        first_page = result.pages[0]
+        if hasattr(first_page, "text") and getattr(first_page, "text") is not None:
+            has_page_text = True
+            
+    if has_page_text:
+        for idx, page in enumerate(result.pages):
+            p_num = getattr(page, "page_num", idx + 1)
+            text_content = getattr(page, "text", "")
+            
+            if ext.lower() == ".pptx":
+                location = f"Slide {p_num}"
+            elif ext.lower() == ".xlsx":
+                sheet_name = getattr(page, "sheet_name", None)
+                if sheet_name:
+                    location = f"Sheet: {sheet_name}"
+                else:
+                    location = f"Sheet {p_num}"
+            else:
+                location = f"Page {p_num}"
+                
+            blocks.append({
+                "text": text_content,
+                "source_file": filename,
+                "location": location
+            })
+    else:
+        # Fallback: split the whole document text by markdown page breaks
+        full_text = getattr(result, "text", "") or ""
+        page_texts = full_text.split('\f')
+        if len(page_texts) <= 1:
+            page_texts = full_text.split('\n---\n')
+            
+        for idx, text_content in enumerate(page_texts):
+            p_num = idx + 1
+            if ext.lower() == ".pptx":
+                location = f"Slide {p_num}"
+            elif ext.lower() == ".xlsx":
+                location = f"Sheet {p_num}"
+            else:
+                location = f"Page {p_num}"
+                
+            blocks.append({
+                "text": text_content.strip(),
+                "source_file": filename,
+                "location": location
+            })
+            
+    return blocks, []
 
-def parse_pptx(file_bytes: bytes, filename: str) -> list[dict]:
-    """
-    Parses a PPTX file from bytes.
-    Extracts text per slide, with location formatted as 'Slide {n}' (1-indexed).
-    """
-    prs = Presentation(io.BytesIO(file_bytes))
-    blocks = []
-    for idx, slide in enumerate(prs.slides):
-        slide_text_parts = []
-        for shape in slide.shapes:
-            if hasattr(shape, "text") and shape.text.strip():
-                slide_text_parts.append(shape.text)
-        text = "\n".join(slide_text_parts)
-        blocks.append({
-            "text": text,
-            "source_file": filename,
-            "location": f"Slide {idx + 1}"
-        })
-    return blocks
 
 def parse_html(file_bytes: bytes, filename: str) -> list[dict]:
     """
@@ -138,7 +221,7 @@ def parse_html(file_bytes: bytes, filename: str) -> list[dict]:
         if hasattr(node, "children"):
             for child in node.children:
                 traverse(child)
-
+ 
     # Begin traversal on body (or root soup if body is missing)
     start_node = soup.body if soup.body else soup
     traverse(start_node)
@@ -153,7 +236,7 @@ def parse_html(file_bytes: bytes, filename: str) -> list[dict]:
         })
         
     return blocks
-
+ 
 def parse_csv(file_bytes: bytes, filename: str) -> list[dict]:
     """
     Parses a CSV file from bytes.
@@ -185,7 +268,7 @@ def parse_csv(file_bytes: bytes, filename: str) -> list[dict]:
         })
         
     return blocks
-
+ 
 def parse_txt(file_bytes: bytes, filename: str) -> list[dict]:
     """
     Parses a TXT file from bytes.
@@ -215,29 +298,31 @@ def parse_txt(file_bytes: bytes, filename: str) -> list[dict]:
         })
         
     return blocks
-
-def parse_file(file_bytes: bytes, filename: str) -> list[dict]:
+ 
+def parse_file(file_bytes: bytes, filename: str) -> tuple[list[dict], list[str]]:
     """
     Dispatcher function that picks the right parser based on file extension.
     Raises ValueError for unsupported types.
     """
     ext = os.path.splitext(filename)[1].lower()
-    with logfire.span("Parsing file {filename} ({ext})", filename=filename, ext=ext):
-        if ext == ".pdf":
-            blocks = parse_pdf(file_bytes, filename)
-        elif ext == ".docx":
-            blocks = parse_docx(file_bytes, filename)
-        elif ext == ".pptx":
-            blocks = parse_pptx(file_bytes, filename)
+    is_liteparse = ext in [".pdf", ".docx", ".pptx", ".xlsx", ".png", ".jpg", ".jpeg"]
+    parser_name = "LiteParse" if is_liteparse else "Custom"
+    
+    with logfire.span("Parsing file {filename} ({ext}) via {parser_name}", filename=filename, ext=ext, parser_name=parser_name):
+        if is_liteparse:
+            blocks, warnings = parse_with_liteparse(file_bytes, filename, ext)
         elif ext in [".html", ".htm"]:
             blocks = parse_html(file_bytes, filename)
+            warnings = []
         elif ext == ".csv":
             blocks = parse_csv(file_bytes, filename)
+            warnings = []
         elif ext == ".txt":
             blocks = parse_txt(file_bytes, filename)
+            warnings = []
         else:
             logfire.error("Unsupported extension {ext} for {filename}", ext=ext, filename=filename)
             raise ValueError(f"Unsupported file type: '{ext}' in file '{filename}'")
             
-        logfire.info("Successfully parsed {filename}. Extracted {num_blocks} blocks.", filename=filename, num_blocks=len(blocks))
-        return blocks
+        logfire.info("Successfully parsed {filename} via {parser_name}. Extracted {num_blocks} blocks.", filename=filename, parser_name=parser_name, num_blocks=len(blocks))
+        return blocks, warnings
