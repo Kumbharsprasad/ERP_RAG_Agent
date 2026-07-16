@@ -137,20 +137,20 @@ The application leverages OpenTelemetry integration through Pydantic Logfire:
 - **FastAPI Instrumentation**: `logfire.instrument_fastapi(app)` automatically tracks incoming HTTP requests, response status codes, route durations, and payloads.
 - **LangGraph Node Spans**: The execution of the agent state graph is wrapped in `logfire.span(...)` segments. This provides developers with instant visibility into individual node processing times, inputs, outputs, and any internal exception tracebacks without modifying print statement logs.
 
-## Phase 5: Streamlit Frontend & Multi-Service Deployment
+## Phase 5: Next.js Frontend & Multi-Service Deployment
 
-Phase 5 introduces a Streamlit user interface as the primary client, alongside deployment configurations for production environments.
+Phase 5 replaces the Streamlit interface with a premium, high-fidelity Next.js (App Router, TypeScript) frontend client, alongside deployment configurations for separate hosting environments (Vercel and Render).
 
 ### Core Architecture Flow
 
 ```
 ┌─────────────────┐
-│  Streamlit App  │ (User-facing frontend)
+│   Next.js App   │ (User-facing frontend on Vercel)
 └────────┬────────┘
          │ (HTTP Form + Multi-File upload)
          ▼
 ┌─────────────────┐
-│   FastAPI App   │ (Main API Service - app.main)
+│   FastAPI App   │ (Main API Service on Render - app.main)
 └────────┬────────┘
          │ (Invokes graph wrapped in Logfire spans)
          ▼
@@ -183,7 +183,7 @@ QDRANT_API_KEY=your_qdrant_cluster_api_key
 LOGFIRE_TOKEN=your_logfire_token_here
 
 # Frontend Configuration
-BACKEND_API_URL=http://localhost:8000
+NEXT_PUBLIC_BACKEND_API_URL=http://localhost:8000
 ```
 
 #### 2. Start the Backend API
@@ -192,10 +192,11 @@ Run the FastAPI backend on port 8000:
 .\agentvenv\Scripts\python -m uvicorn app.main:app --port 8000 --reload
 ```
 
-#### 3. Start the Streamlit Frontend
-Run the Streamlit app in a separate terminal:
+#### 3. Start the Next.js Frontend
+Navigate to the `frontend` folder and run the Next.js development server:
 ```powershell
-.\agentvenv\Scripts\streamlit run streamlit_app.py
+cd frontend
+npm run dev
 ```
 
 ### Deployment Configuration
@@ -213,14 +214,15 @@ The repository contains a declarative `render.yaml` configuration. To deploy:
 > - **Known Limitation**: Using Render's default free-tier Python native runtime will trigger fallback parsing (`python-docx` / `python-pptx` / `pandas`) instead of LiteParse, which may reduce parsing quality for tables and complex layouts.
 
 
-#### Streamlit UI (Streamlit Community Cloud)
-The Streamlit application can be deployed for free on **Streamlit Community Cloud**:
-1. Connect the git repository to Streamlit Community Cloud.
-2. Specify the entry point file as `streamlit_app.py`.
-3. Under the app's advanced settings, define the production FastAPI backend endpoint:
+#### Next.js Frontend (Vercel)
+The Next.js UI application is designed to be deployed separately on **Vercel**:
+1. Connect your GitHub repository to Vercel.
+2. Import the project and set the **Root Directory** of the Vercel project to `frontend`.
+3. Under the Vercel project's Environment Variables dashboard, define the production API endpoint mapping to the Render backend service:
    ```toml
-   BACKEND_API_URL = "https://your-deployed-fastapi-backend-url.onrender.com"
+   NEXT_PUBLIC_BACKEND_API_URL = "https://your-deployed-fastapi-backend-url.onrender.com"
    ```
+4. Deploy the project. Vercel will automatically trigger production builds and provision a global HTTPS endpoint.
 
 ---
 
@@ -239,8 +241,8 @@ The Streamlit application can be deployed for free on **Streamlit Community Clou
    - Built FastAPI routes (`/agent` and `/health`) with Logfire server-side request tracing.
    - Implemented length limits, injection detectors, post-generation PII leakage scanners, and Pydantic response schema checks.
 5. **Phase 5: User Interface & Deployment**
-   - Designed a clean sidebar-powered Streamlit client with preset document requests, multipart RAG uploads, visual step-progress trackers, and document file download triggers.
-   - Provided declarative Render configurations (`render.yaml`) and multi-environment variables orchestration.
+   - Designed a high-fidelity Next.js App Router client with preset document requests, drag-and-drop RAG uploads, visual step-progress trackers, and terminal log consoles.
+   - Provided declarative Render configurations (`render.yaml`) and Vercel environment variables orchestrations.
 
 ## Future Phases
 
