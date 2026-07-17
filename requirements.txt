@@ -15,6 +15,5 @@ logfire[fastapi]
 langgraph
 langchain-core 
 guardrails-ai
-streamlit
 requests
 openpyxl

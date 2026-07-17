@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-light: #f8fafc;
+  --color-card-light: rgba(255, 255, 255, 0.85);
+  --color-border-light: rgba(99, 102, 241, 0.1);
+  --color-brand-purple: #4f46e5; /* Indigo-600 */
+  --color-brand-teal: #0d9488; /* Teal-600 */
+  --color-brand-blue: #2563eb; /* Blue-600 */
+  --color-brand-amber: #d97706; /* Amber-600 */
+  --color-brand-green: #059669; /* Emerald-600 */
+  --color-brand-gray-text: #475569; /* Slate-600 */
+}
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+  scroll-behavior: smooth;
+}
+
+/* Glassmorphism custom classes - Glossy Light Theme */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 
+    0 10px 30px -10px rgba(99, 102, 241, 0.08), 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.03);
+}
+
+.glass-panel-glow {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  box-shadow: 
+    0 12px 40px -10px rgba(99, 102, 241, 0.18), 
+    0 0 20px rgba(99, 102, 241, 0.04),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+/* Custom glow pulse animations for live console and workflow status */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(79, 70, 229, 0.3);
+    opacity: 0.8;
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(79, 70, 229, 0.6);
+    opacity: 1;
+  }
+}
+
+.animate-glow-pulse {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes live-blink {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.animate-live-blink {
+  animation: live-blink 1.5s infinite ease-in-out;
+}
+
+@keyframes bounce-down {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+.animate-bounce-down {
+  animation: bounce-down 2s infinite ease-in-out;
+}
+
+/* Scrollbar styles for the terminal live console */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.4);
+}
